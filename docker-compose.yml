@@ -1,0 +1,62 @@
+# Run the whole stack locally: PostgreSQL + API + web app.
+#
+#   docker compose up --build
+#   -> web  http://localhost:3000     (sign in with ADMIN_EMAIL / ADMIN_PASSWORD)
+#   -> API  http://localhost:8000/docs
+#
+# This is a development / evaluation setup (APP_ENV=development, plain HTTP). For production use the
+# PM2 + Nginx scripts in each repo's deploy/ folder, or adapt this file behind a TLS terminator.
+# Settings come from the environment or a root .env file; see .env.example.
+
+name: webapp
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: webapp
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d webapp"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./webapp-backend
+    environment:
+      APP_ENV: development
+      DATABASE_ENGINE: postgresql
+      # Keep POSTGRES_PASSWORD URL-safe (letters and digits) or percent-encode it.
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/webapp
+      SECRET_KEY: ${SECRET_KEY:-change-me-development-only-secret-key-0000000000}
+      BACKEND_CORS_ORIGINS: http://localhost:${WEB_PORT:-3000}
+      # Applies migrations, seeds roles/permissions and creates the first administrator.
+      RUN_MIGRATIONS: "true"
+      INITIAL_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      INITIAL_ADMIN_NAME: Administrator
+      INITIAL_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe-12345}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  web:
+    build:
+      context: ./webapp-frontend
+      args:
+        # The browser calls the API directly, so this is the host-visible URL, not the container name.
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${API_PORT:-8000}/api/v1
+        NEXT_PUBLIC_APP_NAME: ${APP_NAME:-Webapp}
+        NEXT_PUBLIC_PRIMARY_COLOR: ${PRIMARY_COLOR:-#4F46E5}
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  db-data:
