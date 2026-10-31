@@ -22,13 +22,13 @@
 
 ## Before you push
 
-Backend (`webapp-backend/`):
+Backend (`kampusping-backend/`):
 
 ```bash
 ruff check . && ruff format --check . && pyright && pytest
 ```
 
-Frontend (`webapp-frontend/`):
+Frontend (`kampusping-frontend/`):
 
 ```bash
 npm run check          # lint, typecheck, format check, unit tests
@@ -36,7 +36,7 @@ npm run build
 ```
 
 CI runs the same commands. For changes that touch both sides, also run the e2e suite
-(`webapp-frontend/e2e/README.md`).
+(`kampusping-frontend/e2e/README.md`).
 
 ## Guidelines
 

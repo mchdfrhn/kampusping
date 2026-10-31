@@ -1,6 +1,6 @@
 # The two app folders are their own git repositories.
-/webapp-backend/
-/webapp-frontend/
+/kampusping-backend/
+/kampusping-frontend/
 
 # Environment (only *.example files are committed)
 .env
@@ -12,3 +12,6 @@
 Thumbs.db
 .idea/
 .vscode/
+
+# SDD scratch (plan workspaces)
+.superpowers/

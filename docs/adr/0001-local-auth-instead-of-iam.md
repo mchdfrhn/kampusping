@@ -25,7 +25,7 @@ Authentication, users, roles and permissions live in the application itself.
   are data that administrators compose; routes check permissions with `require_permissions(...)`.
 - Lockout and rate limiting on login; production refuses unsafe configuration.
 
-Details: `webapp-backend/docs/auth.md`.
+Details: `kampusping-backend/docs/auth.md`.
 
 ## Consequences
 
