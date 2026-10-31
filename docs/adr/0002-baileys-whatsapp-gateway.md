@@ -54,6 +54,26 @@ Costs and risks:
 - NFR-04 ("template pesan disetujui") does not apply as written, because no template approval exists
   on this channel.
 
+## Gateway requirements
+
+Binding for `kampusping-wa-gateway/` (recorded after the backend reviews; the gateway README has
+the details):
+
+1. **Durable dedupe by `client_ref`.** The worker retries a send after a lost answer or a crash.
+   The gateway keeps `client_ref -> provider_message_id` in a file written atomically, retained
+   for at least 14 days (`WA_DEDUPE_TTL_DAYS`, minimum 14). A repeated `client_ref` answers with
+   the original id without sending again; concurrent requests with the same ref share one
+   attempt; only successful sends are recorded. The record is written right after WhatsApp
+   accepted the message and before the answer, so only a crash in that window can duplicate.
+2. **Delayed and retried receipts.** The backend answers 202 for receipts of unknown message ids
+   and drops them: it only knows an id after the worker committed the send, and it cannot ask the
+   gateway to send a receipt again. So the gateway sends a `status` event no earlier than
+   `WA_STATUS_DELAY_MS` (default 2 s) after the answer to the send, retries every webhook event on
+   network errors and non-2xx answers with exponential backoff (default 5 retries: 1, 2, 4, 8,
+   16 s) and keeps the receipts of one message in order (`read` never before `delivered`).
+3. **Signature.** `X-Signature: sha256=<lowercase hex HMAC-SHA256>` over the exact body bytes
+   sent, key `WA_WEBHOOK_SECRET`; the backend accepts lowercase hex only.
+
 ## Alternatives considered
 
 - **Official Cloud API (BRD option A):** recommended by the BRD, stable and low ban risk, but needs a

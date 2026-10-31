@@ -1,6 +1,7 @@
-# The two app folders are their own git repositories.
+# The app folders are their own git repositories.
 /kampusping-backend/
 /kampusping-frontend/
+/kampusping-wa-gateway/
 
 # Environment (only *.example files are committed)
 .env
