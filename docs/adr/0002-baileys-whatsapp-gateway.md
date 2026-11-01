@@ -70,9 +70,19 @@ the details):
    gateway to send a receipt again. So the gateway sends a `status` event no earlier than
    `WA_STATUS_DELAY_MS` (default 2 s) after the answer to the send, retries every webhook event on
    network errors and non-2xx answers with exponential backoff (default 5 retries: 1, 2, 4, 8,
-   16 s) and keeps the receipts of one message in order (`read` never before `delivered`).
+   16 s) and keeps the receipts of one message in order (`read` never before `delivered`). In
+   case the backend's commit takes longer than that delay, every delivered `status` event is sent
+   once more `WA_STATUS_REPLAY_MS` later (default 30 s, `0` disables) through the same ordered,
+   signed and retried path; the backend ignores stale and duplicate receipts.
 3. **Signature.** `X-Signature: sha256=<lowercase hex HMAC-SHA256>` over the exact body bytes
    sent, key `WA_WEBHOOK_SECRET`; the backend accepts lowercase hex only.
+4. **`client_ref` reuse with different content -> `409 client_ref_conflict`.** Message ids can
+   repeat after a database reset, restore or move. Each dedupe record therefore carries a one-way
+   fingerprint (sha256 over recipient and text, no clear personal data). The same `client_ref`
+   with a different recipient or text is answered `409 {"error":"client_ref_conflict"}` instead
+   of the old id, and nothing is sent. The backend maps this non-transient 4xx to
+   `ProviderRejected`, so the message fails visibly instead of being silently recorded as sent.
+   Records without a fingerprint (older store files) still dedupe by `client_ref` only.
 
 ## Alternatives considered
 
