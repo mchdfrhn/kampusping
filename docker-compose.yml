@@ -1,14 +1,59 @@
-# Run the whole stack locally: PostgreSQL + API + web app.
+# Run the whole stack locally: PostgreSQL + API + worker + web app (+ optional WhatsApp gateway).
+#
+# Default: the FAKE WhatsApp provider. Messages are recorded in memory, nothing reaches WhatsApp.
 #
 #   docker compose up --build
 #   -> web  http://localhost:3000     (sign in with ADMIN_EMAIL / ADMIN_PASSWORD)
 #   -> API  http://localhost:8000/docs
+#   The worker (planner + sender loop) runs too, with WA_PROVIDER=fake.
+#
+# With the real WhatsApp gateway (Baileys). Needs a dedicated WhatsApp number; read
+# docs/adr/0002-baileys-whatsapp-gateway.md first. Put these in the root .env (see .env.example):
+#   WA_PROVIDER=gateway
+#   WA_GATEWAY_API_KEY=<random, 16+ characters>      # `openssl rand -hex 32`
+#   WA_WEBHOOK_SECRET=<another random, 16+ characters>
+#
+#   WA_PROVIDER=gateway docker compose --profile whatsapp up --build
+#   The gateway REFUSES to start with empty, short (<16) or "change-me..." secrets. Without the
+#   profile it is not started at all, and the secrets stay optional.
+#   The gateway port 8095 is NOT published to the host: only api and worker reach it, over the
+#   compose network. Pair the phone from Pengaturan in the web app (QR code).
+#
+# Ports: web 3000, api 8000 (host side, change with WEB_PORT / API_PORT). The gateway has no host port.
+#
+# Exactly ONE worker. Do not scale it (`--scale worker=2` is wrong): the one-message-per-student-
+# per-day rule (AB-03) is only safe with a single sender. The api service applies migrations and the
+# seed on start; the worker waits for the api to be healthy so those have run first.
+#
+# Volumes wa-auth and wa-data hold the WhatsApp login (credentials) and the dedupe store. Protect
+# and back them up like a password vault, and never delete them casually: losing wa-auth means
+# scanning the QR again, losing wa-data weakens the double-send protection.
 #
 # This is a development / evaluation setup (APP_ENV=development, plain HTTP). For production use the
 # PM2 + Nginx scripts in each repo's deploy/ folder, or adapt this file behind a TLS terminator.
 # Settings come from the environment or a root .env file; see .env.example.
+# The Dockerfiles and this file have not been built or run on the machine where they were written
+# (no Docker there): build them before relying on them.
 
 name: kampusping
+
+# The API and the worker run the same image and need the same settings.
+x-backend-environment: &backend-environment
+  APP_ENV: development
+  DATABASE_ENGINE: postgresql
+  # Keep POSTGRES_PASSWORD URL-safe (letters and digits) or percent-encode it.
+  DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/kampusping
+  SECRET_KEY: ${SECRET_KEY:-change-me-development-only-secret-key-0000000000}
+  BACKEND_CORS_ORIGINS: http://localhost:${WEB_PORT:-3000}
+  APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Jakarta}
+  WORKER_TICK_SECONDS: ${WORKER_TICK_SECONDS:-60}
+  # fake = in-memory provider; gateway = the wa-gateway service (start it with --profile whatsapp).
+  WA_PROVIDER: ${WA_PROVIDER:-fake}
+  WA_GATEWAY_URL: http://wa-gateway:8095
+  # Optional: empty is fine with the fake provider. Never use ${VAR:?...} here: compose interpolates
+  # the whole file even when the whatsapp profile is off.
+  WA_GATEWAY_API_KEY: ${WA_GATEWAY_API_KEY:-}
+  WA_WEBHOOK_SECRET: ${WA_WEBHOOK_SECRET:-}
 
 services:
   db:
@@ -27,13 +72,9 @@ services:
 
   api:
     build: ./kampusping-backend
+    image: kampusping-backend:local
     environment:
-      APP_ENV: development
-      DATABASE_ENGINE: postgresql
-      # Keep POSTGRES_PASSWORD URL-safe (letters and digits) or percent-encode it.
-      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/kampusping
-      SECRET_KEY: ${SECRET_KEY:-change-me-development-only-secret-key-0000000000}
-      BACKEND_CORS_ORIGINS: http://localhost:${WEB_PORT:-3000}
+      <<: *backend-environment
       # Applies migrations, seeds roles/permissions and creates the first administrator.
       RUN_MIGRATIONS: "true"
       INITIAL_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
@@ -44,6 +85,56 @@ services:
         condition: service_healthy
     ports:
       - "${API_PORT:-8000}:8000"
+
+  # The planner + sender loop (ADR 0003). Same image as the api; the entrypoint only runs
+  # migrations when RUN_MIGRATIONS=true, which is deliberately NOT set here, so the worker never
+  # migrates or seeds. Exactly one instance: never scale it.
+  worker:
+    build: ./kampusping-backend
+    image: kampusping-backend:local
+    command: ["python", "-m", "app.cli", "run-worker"]
+    restart: unless-stopped
+    environment:
+      <<: *backend-environment
+    depends_on:
+      db:
+        condition: service_healthy
+      # The api image has a /health healthcheck; healthy means its migrations and seed finished.
+      api:
+        condition: service_healthy
+    # The image's HTTP healthcheck targets the api and does not apply to this process.
+    healthcheck:
+      disable: true
+
+  # Optional real WhatsApp (Baileys). Off by default: start with `--profile whatsapp`.
+  wa-gateway:
+    profiles: ["whatsapp"]
+    build: ./kampusping-wa-gateway
+    image: kampusping-wa-gateway:local
+    restart: unless-stopped
+    environment:
+      # Listening on all interfaces is acceptable ONLY because the port is not published to the host
+      # (no `ports:` below): the compose network is the only way in, and every route needs the key.
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: "8095"
+      GATEWAY_ALLOW_NON_LOOPBACK: "true"
+      # Same values as the api and worker. Empty by default on purpose: the gateway refuses empty,
+      # short (<16) and "change-me..." values at startup, so set real ones in the root .env.
+      WA_GATEWAY_API_KEY: ${WA_GATEWAY_API_KEY:-}
+      WA_WEBHOOK_SECRET: ${WA_WEBHOOK_SECRET:-}
+      WA_WEBHOOK_URL: http://api:8000/api/v1/webhooks/whatsapp
+      # Kept one level below the mounted folders, see the gateway Dockerfile.
+      WA_AUTH_DIR: /app/session/auth_state
+      WA_DEDUPE_FILE: /app/data/sent-refs.json
+    volumes:
+      # WhatsApp credentials. Protect and back up. (Mounted at /app/session, with the session in
+      # its auth_state subfolder, so that POST /logout can rename the session folder.)
+      - wa-auth:/app/session
+      - wa-data:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    # No ports: the gateway must not be reachable from the host or the network.
 
   web:
     build:
@@ -60,3 +151,6 @@ services:
 
 volumes:
   db-data:
+  # WhatsApp login (credentials) and the client_ref dedupe store. Used only with --profile whatsapp.
+  wa-auth:
+  wa-data:
