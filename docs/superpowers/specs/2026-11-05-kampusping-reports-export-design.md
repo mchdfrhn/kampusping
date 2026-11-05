@@ -1,6 +1,6 @@
 # Desain: Ekspor laporan penagihan ke Excel dan PDF (FR-14)
 
-Tanggal: 2026-11-05. Status: menunggu review. Sumber: BRD FR-14, BR-06; spec desain §7
+Tanggal: 2026-11-05. Status: diimplementasi (rencana: `docs/superpowers/plans/2026-11-05-kampusping-reports-export.md`; kode ada di branch `feat/reports-export` repo backend dan frontend, belum di-merge). Sumber: BRD FR-14, BR-06; spec desain §7
 (`2026-10-31-kampusping-design.md`). Kode kebutuhan (FR/NFR/AB/BR) merujuk ke BRD.
 
 ## 1. Tujuan
