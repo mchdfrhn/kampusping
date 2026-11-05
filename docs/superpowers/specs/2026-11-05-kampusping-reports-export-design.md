@@ -52,8 +52,9 @@ diinjeksi, bukan jam sistem.
 - Pembayaran dalam periode: pada `weekly`, jumlah dan nominal tagihan dengan `paid_at` dalam
   jendela.
 - **Lunas setelah pesan:** tagihan lunas yang memiliki minimal satu pesan berstatus `sent`,
-  `delivered`, atau `read` dengan tanggal kirim (zona lokal) `<= paid_at`. Dihitung di Python agar
-  hasilnya sama di PostgreSQL dan SQLite.
+  `delivered`, atau `read` dengan tanggal kirim (zona lokal) `<= paid_at`. Cakupan: pada `weekly`
+  hanya tagihan yang `paid_at`-nya jatuh dalam jendela 7 hari; pada `semester` seluruh tagihan
+  lunas semester itu. Dihitung di Python agar hasilnya sama di PostgreSQL dan SQLite.
 
 **Bagian 2, Per prodi dan angkatan.** Satu baris per pasangan (prodi, angkatan): jumlah tagihan,
 lunas, belum lunas, lewat jatuh tempo, nominal tunggakan, persentase lunas. Nilai kosong tampil
