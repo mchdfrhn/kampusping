@@ -102,6 +102,13 @@ tanpa mengubah data, dipakai dialog konfirmasi). Rollback berjalan dalam **satu 
 mengubah status tagihan manual setelah impor), **seluruh rollback ditolak** dengan 409 dan daftar baris yang bentrok
 (maksimal 50 ditampilkan, ditambah total). Tidak ada rollback sebagian.
 
+**Penyesuaian setelah review (2026-11-10):**
+- Perubahan pada `phone_status` mahasiswa (diubah sistem saat pengiriman gagal) bukan konflik.
+- Baris yang sudah dihapus permanen (hard delete) dilewati, bukan konflik.
+- Rollback dan apply diserialisasi dengan advisory lock PostgreSQL (`imports/locking.py`); rollback mengunci baris terkait (`FOR UPDATE`) selama pengecekan konflik. Belum diuji pada PostgreSQL (tes memakai SQLite).
+- Impor ulang setelah rollback memperlakukan tagihan yang dipulihkan sebagai baru: status lunas/belum ditentukan ulang oleh berkas dan tagihan lama mahasiswa di-supersede lagi.
+- Keterbatasan yang diketahui: pesan antre yang dibatalkan rollback tetap menempati `(invoice_id, rule_id)`, sehingga aturan itu tidak direncanakan ulang untuk tagihan yang dipulihkan.
+
 **Eksekusi:**
 - `created`: mahasiswa dan tagihan di-soft-delete (`deleted_at`, `deleted_by`).
 - `updated`: field dikembalikan ke `before`.
