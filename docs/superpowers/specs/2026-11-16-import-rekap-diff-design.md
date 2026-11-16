@@ -1,7 +1,7 @@
 # KampusPing: desain deteksi lunas dan tagihan baru pada impor Rekap Tunggakan
 
 - Tanggal: 2026-11-16
-- Status: disetujui (2026-11-16), belum diimplementasikan
+- Status: disetujui, diimplementasikan (cabang `feat/import-rekap-diff` di repo backend dan frontend)
 - Kebutuhan induk: FR-01 di [`docs/BRD-penagihan-uang-kuliah-whatsapp.md`](../../BRD-penagihan-uang-kuliah-whatsapp.md); desain induk di [`2026-10-31-kampusping-design.md`](2026-10-31-kampusping-design.md); rollback impor di [`2026-11-10-import-rollback-design.md`](2026-11-10-import-rollback-design.md)
 - Aturan bisnis yang tidak boleh melemah: AB-01 / FR-06 (hanya tagihan belum lunas yang ditagih; lunas bersifat sticky), AB-03, AB-05, NFR-07 (audit), NFR-08 (data hanya masuk lewat berkas)
 
